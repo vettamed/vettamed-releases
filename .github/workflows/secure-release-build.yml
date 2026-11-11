@@ -1,0 +1,58 @@
+name: Verify and build protected native release
+on:
+  workflow_dispatch:
+    inputs:
+      source_asset_id:
+        required: true
+        description: Encrypted temporary source asset ID
+      source_head:
+        required: true
+        description: Exact reviewed source commit
+      transfer_tag:
+        required: true
+        description: Temporary draft for encrypted diagnostics
+permissions:
+  contents: write
+concurrency:
+  group: protected-release-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: Verify ${{ matrix.job }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - job: windows
+            runner: windows-latest
+          - job: platform
+            runner: ubuntu-24.04
+          - job: database
+            runner: ubuntu-24.04
+          - job: web
+            runner: ubuntu-24.04
+          - job: generation
+            runner: ubuntu-24.04
+          - job: hybrid
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.12'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify authenticated private source and release
+        env:
+          BUILD_JOB: ${{ matrix.job }}
+          EXPECTED_HEAD: ${{ inputs.source_head }}
+          SOURCE_ASSET_ID: ${{ inputs.source_asset_id }}
+          BUILD_TRANSFER_TAG: ${{ inputs.transfer_tag }}
+          SOURCE_KEY: ${{ secrets.VETTAMED_EPHEMERAL_BUILD_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/secure-release-job.mjs

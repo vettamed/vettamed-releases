@@ -11,7 +11,7 @@ assert.ok(['windows','windows-acceptance','platform','database','web','generatio
 assert.match(head,/^[a-f0-9]{40}$/);assert.match(asset,/^[0-9]+$/)
 assert.equal(process.env.GITHUB_REPOSITORY,'vettamed/vettamed-releases')
 const key=Buffer.from(process.env.SOURCE_KEY,'hex');assert.equal(key.length,32)
-const root=fs.mkdtempSync(path.join(os.tmpdir(),'vettamed-private-build-')),source=path.join(root,'source'),log=path.join(root,'private.log'),fd=fs.openSync(log,'w'),checks=[]
+const root=fs.mkdtempSync(path.join(fs.realpathSync.native(process.env.RUNNER_TEMP||os.tmpdir()),'vettamed-private-build-')),source=path.join(root,'source'),log=path.join(root,'private.log'),fd=fs.openSync(log,'w'),checks=[]
 const environment={...process.env,NEXT_PUBLIC_SUPABASE_URL:'https://placeholder.supabase.co',NEXT_PUBLIC_SUPABASE_ANON_KEY:'placeholder-anon-key',SUPABASE_URL:'https://placeholder.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'placeholder-service-role',CSC_IDENTITY_AUTO_DISCOVERY:'false'}
 for(const n of ['SOURCE_KEY','GH_TOKEN','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN','ACTIONS_ID_TOKEN_REQUEST_TOKEN'])delete environment[n]
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex')

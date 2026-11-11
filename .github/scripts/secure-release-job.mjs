@@ -16,7 +16,7 @@ const environment={...process.env,NEXT_PUBLIC_SUPABASE_URL:'https://placeholder.
 for(const n of ['SOURCE_KEY','GH_TOKEN','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN','ACTIONS_ID_TOKEN_REQUEST_TOKEN'])delete environment[n]
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex')
 let stage='download'
-function run(label,command,args=[],extra={}){stage=label;const start=Date.now();const result=spawnSync(command,args,{cwd:source,env:environment,stdio:['pipe',fd,fd],...extra});checks.push({name:label,passed:result.status===0,durationMs:Date.now()-start});if(result.error||result.status!==0)throw Error('private command failed');console.log('Completed '+label)}
+function run(label,command,args=[],extra={}){stage=label;const start=Date.now();const result=spawnSync(command,args,{cwd:source,env:environment,stdio:['pipe',fd,fd],...extra});checks.push({name:label,passed:result.status===0,durationMs:Date.now()-start});if(result.error||result.status!==0){fs.writeSync(fd,JSON.stringify({command,args,cwd:source,status:result.status,signal:result.signal,error:result.error?{message:result.error.message,code:result.error.code}:null})+'\n');throw Error('private command failed')};console.log('Completed '+label)}
 function npm(label,args){run(label,process.platform==='win32'?'npm.cmd':'npm',args,{shell:process.platform==='win32'})}
 function node(label,args){run(label,process.execPath,args)}
 function seal(bytes,aad){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',key,iv);c.setAAD(Buffer.from(aad));const payload=Buffer.concat([c.update(bytes),c.final()]);return Buffer.concat([Buffer.from('VTBUILD1'),iv,c.getAuthTag(),payload])}
@@ -50,8 +50,9 @@ try{
  }
  if(kind==='windows-acceptance'){
   assert.equal(process.platform,'win32');assert.match(process.env.EXPECTED_INSTALLER_SHA,/^[a-f0-9]{64}$/);assert.match(process.env.EXPECTED_ASAR_SHA,/^[a-f0-9]{64}$/)
+  const electronRequire=createRequire(path.join(source,'apps/desktop/package.json'));node('Ensure official Electron runtime',[path.join(path.dirname(electronRequire.resolve('electron')),'install.js')]);const electronExecutable=electronRequire('electron')
   node('Compile real Windows shortcut probe',['node_modules/typescript/bin/tsc','-p','apps/desktop/tsconfig.electron.json'])
-  const shortcutFile=path.join(root,'shortcuts.json');run('Hold and release actual Windows shortcut table',path.join(source,'apps/desktop/node_modules/electron/dist/electron.exe'),['scripts/probe-exam-lockdown.cjs',shortcutFile])
+  const shortcutFile=path.join(root,'shortcuts.json');run('Hold and release actual Windows shortcut table',electronExecutable,['scripts/probe-exam-lockdown.cjs',shortcutFile])
   execFileSync('gh',['release','download','v3.2.32','--repo',process.env.GITHUB_REPOSITORY,'--pattern','Vettamed-3.2.32-win-x64.exe','--dir',root],{stdio:['ignore',fd,fd]})
   const installer=path.join(root,'Vettamed-3.2.32-win-x64.exe');assert.equal(hash(fs.readFileSync(installer)),process.env.EXPECTED_INSTALLER_SHA)
   const installed=path.join(root,'installed');run('Install exact verified Windows package',installer,['/S','/D='+installed])
@@ -93,7 +94,7 @@ try{
  console.log(JSON.stringify({job:kind,sourceHead:head,passed:true,checks}))
 }catch(error){
  fs.appendFileSync(log,'\nPrivate verifier exception: '+String(error.stack||error))
- const encrypted=path.join(root,`${kind}-${process.env.GITHUB_RUN_ID}.private-log.enc`);fs.writeFileSync(encrypted,seal(fs.readFileSync(log),'vettamed:release-log:'+head+':'+kind))
+ const encrypted=path.join(root,`${kind}-${process.env.ACCEPTANCE_RUNNER||'default'}-${process.env.GITHUB_RUN_ID}.private-log.enc`);fs.writeFileSync(encrypted,seal(fs.readFileSync(log),'vettamed:release-log:'+head+':'+kind))
  try{execFileSync('gh',['release','upload',process.env.BUILD_TRANSFER_TAG,encrypted,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:'ignore'})}catch{}
  console.error('Verification failed during '+stage+'. Diagnostics were encrypted for the owner.');process.exitCode=1
 }finally{fs.closeSync(fd);fs.rmSync(root,{recursive:true,force:true});key.fill(0)}

@@ -6,7 +6,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, windows-database, database]
+        options: [all, windows, windows-database, database]
         description: Required verification groups
       source_asset_id:
         required: true
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.scope == 'windows-database' && '[{"job":"windows","runner":"windows-latest"},{"job":"database","runner":"ubuntu-24.04"}]' || inputs.scope == 'database' && '[{"job":"database","runner":"ubuntu-24.04"}]' || '[{"job":"windows","runner":"windows-latest"},{"job":"platform","runner":"ubuntu-24.04"},{"job":"database","runner":"ubuntu-24.04"},{"job":"web","runner":"ubuntu-24.04"},{"job":"generation","runner":"ubuntu-24.04"},{"job":"hybrid","runner":"ubuntu-24.04"}]') }}
+        include: ${{ fromJSON(inputs.scope == 'windows' && '[{"job":"windows","runner":"windows-latest"}]' || inputs.scope == 'windows-database' && '[{"job":"windows","runner":"windows-latest"},{"job":"database","runner":"ubuntu-24.04"}]' || inputs.scope == 'database' && '[{"job":"database","runner":"ubuntu-24.04"}]' || '[{"job":"windows","runner":"windows-latest"},{"job":"platform","runner":"ubuntu-24.04"},{"job":"database","runner":"ubuntu-24.04"},{"job":"web","runner":"ubuntu-24.04"},{"job":"generation","runner":"ubuntu-24.04"},{"job":"hybrid","runner":"ubuntu-24.04"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     steps:

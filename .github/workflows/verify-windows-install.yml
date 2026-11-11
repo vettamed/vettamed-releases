@@ -1,0 +1,49 @@
+name: Verify Windows installer and Exam Mode
+on:
+  workflow_dispatch:
+    inputs:
+      source_asset_id:
+        required: true
+        description: Encrypted source asset ID
+      source_head:
+        required: true
+        description: Exact reviewed commit
+      transfer_tag:
+        required: true
+        description: Temporary private draft
+      installer_sha:
+        required: true
+        description: Verified installer SHA256
+      asar_sha:
+        required: true
+        description: Audited package payload SHA256
+permissions:
+  contents: write
+jobs:
+  accept:
+    name: Installed acceptance ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.12'
+      - name: Verify actual installer and shortcuts
+        env:
+          BUILD_JOB: windows-acceptance
+          EXPECTED_HEAD: ${{ inputs.source_head }}
+          SOURCE_ASSET_ID: ${{ inputs.source_asset_id }}
+          BUILD_TRANSFER_TAG: ${{ inputs.transfer_tag }}
+          SOURCE_KEY: ${{ secrets.VETTAMED_EPHEMERAL_BUILD_KEY }}
+          EXPECTED_INSTALLER_SHA: ${{ inputs.installer_sha }}
+          EXPECTED_ASAR_SHA: ${{ inputs.asar_sha }}
+          ACCEPTANCE_RUNNER: ${{ matrix.os }}
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/secure-release-job.mjs

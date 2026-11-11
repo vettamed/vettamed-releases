@@ -3,11 +3,11 @@ import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import {spawnSync,execFileSync} from 'node:child_process'
+import {spawn,spawnSync,execFileSync} from 'node:child_process'
 import {createRequire} from 'node:module'
 import {pathToFileURL} from 'node:url'
 const kind=process.env.BUILD_JOB,head=process.env.EXPECTED_HEAD,asset=process.env.SOURCE_ASSET_ID
-assert.ok(['windows','platform','database','web','generation','hybrid'].includes(kind))
+assert.ok(['windows','windows-acceptance','platform','database','web','generation','hybrid'].includes(kind))
 assert.match(head,/^[a-f0-9]{40}$/);assert.match(asset,/^[0-9]+$/)
 assert.equal(process.env.GITHUB_REPOSITORY,'vettamed/vettamed-releases')
 const key=Buffer.from(process.env.SOURCE_KEY,'hex');assert.equal(key.length,32)
@@ -47,6 +47,19 @@ try{
   const release=JSON.parse(execFileSync('gh',['release','view','v3.2.32','--repo',process.env.GITHUB_REPOSITORY,'--json','isDraft'],{encoding:'utf8'}));assert.equal(release.isDraft,true)
   execFileSync('gh',['release','upload','v3.2.32',published,published+'.blockmap',feed,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
   execFileSync('gh',['release','upload',process.env.BUILD_TRANSFER_TAG,receiptFile,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
+ }
+ if(kind==='windows-acceptance'){
+  assert.equal(process.platform,'win32');assert.match(process.env.EXPECTED_INSTALLER_SHA,/^[a-f0-9]{64}$/);assert.match(process.env.EXPECTED_ASAR_SHA,/^[a-f0-9]{64}$/)
+  node('Compile real Windows shortcut probe',['node_modules/typescript/bin/tsc','-p','apps/desktop/tsconfig.electron.json'])
+  const shortcutFile=path.join(root,'shortcuts.json');run('Hold and release actual Windows shortcut table',path.join(source,'apps/desktop/node_modules/electron/dist/electron.exe'),['scripts/probe-exam-lockdown.cjs',shortcutFile])
+  execFileSync('gh',['release','download','v3.2.32','--repo',process.env.GITHUB_REPOSITORY,'--pattern','Vettamed-3.2.32-win-x64.exe','--dir',root],{stdio:['ignore',fd,fd]})
+  const installer=path.join(root,'Vettamed-3.2.32-win-x64.exe');assert.equal(hash(fs.readFileSync(installer)),process.env.EXPECTED_INSTALLER_SHA)
+  const installed=path.join(root,'installed');run('Install exact verified Windows package',installer,['/S','/D='+installed])
+  const installedAsar=path.join(installed,'resources/app.asar');for(let i=0;i<100&&!fs.existsSync(installedAsar);i++)await new Promise(r=>setTimeout(r,200));assert.equal(hash(fs.readFileSync(installedAsar)),process.env.EXPECTED_ASAR_SHA)
+  const app=spawn(path.join(installed,'Vettamed.exe'),['--user-data-dir='+path.join(root,'isolated-profile')],{env:environment,stdio:['ignore',fd,fd]})
+  try{await new Promise(r=>setTimeout(r,12000));assert.equal(app.exitCode,null);run('Installed application creates native window','powershell.exe',['-NoProfile','-Command','$p=Get-Process -Id '+app.pid+' -ErrorAction Stop; if($p.MainWindowHandle -eq 0){exit 1}'])}finally{spawnSync('taskkill',['/PID',String(app.pid),'/T','/F'],{stdio:'ignore'})}
+  const receipt={sourceHead:head,verifiedAt:new Date().toISOString(),runner:process.env.ACCEPTANCE_RUNNER,installerSha256:process.env.EXPECTED_INSTALLER_SHA,installedAsarSha256:process.env.EXPECTED_ASAR_SHA,installedPayloadMatchesAuditedAsar:true,isolatedNativeWindowStarted:true,shortcutProbe:JSON.parse(fs.readFileSync(shortcutFile))}
+  const file=path.join(root,'windows-acceptance-'+process.env.ACCEPTANCE_RUNNER+'.json');fs.writeFileSync(file,JSON.stringify(receipt,null,2)+'\n');execFileSync('gh',['release','upload',process.env.BUILD_TRANSFER_TAG,file,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
  }
  if(kind==='platform'){
   npm('Dependency advisories',['run','audit:dependencies']);npm('All workspace types',['run','typecheck']);npm('Release target and ledger tests',['run','test:release-target'])

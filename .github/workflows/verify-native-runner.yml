@@ -1,0 +1,16 @@
+name: Verify native release runner
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify Windows release toolchain
+        shell: pwsh
+        run: |
+          node --version
+          git --version
+          Write-Output 'Windows native release runner available.'

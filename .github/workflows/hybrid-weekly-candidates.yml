@@ -1,0 +1,29 @@
+name: Hybrid weekly candidate fit
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hybrid-weekly-candidates
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.12'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check restricted role and fit candidates
+        env:
+          HYBRID_CANDIDATE_SOURCE_KEY: ${{ secrets.HYBRID_CANDIDATE_SOURCE_KEY }}
+          HYBRID_DATABASE_URL: ${{ secrets.HYBRID_FIT_DATABASE_URL }}
+        run: node .github/scripts/hybrid-candidate-worker.mjs

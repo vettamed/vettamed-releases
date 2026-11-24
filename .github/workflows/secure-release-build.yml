@@ -8,6 +8,9 @@ on:
         type: choice
         options: [all, windows, windows-database, database]
         description: Required verification groups
+      release_version:
+        required: true
+        description: Exact release version (for example 3.2.33)
       source_asset_id:
         required: true
         description: Encrypted temporary source asset ID
@@ -45,6 +48,7 @@ jobs:
         env:
           BUILD_JOB: ${{ matrix.job }}
           EXPECTED_HEAD: ${{ inputs.source_head }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_ASSET_ID: ${{ inputs.source_asset_id }}
           BUILD_TRANSFER_TAG: ${{ inputs.transfer_tag }}
           SOURCE_KEY: ${{ secrets.VETTAMED_EPHEMERAL_BUILD_KEY }}

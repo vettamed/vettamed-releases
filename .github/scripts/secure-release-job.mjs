@@ -6,9 +6,9 @@ import assert from 'node:assert/strict'
 import {spawn,spawnSync,execFileSync} from 'node:child_process'
 import {createRequire} from 'node:module'
 import {pathToFileURL} from 'node:url'
-const kind=process.env.BUILD_JOB,head=process.env.EXPECTED_HEAD,asset=process.env.SOURCE_ASSET_ID
+const kind=process.env.BUILD_JOB,head=process.env.EXPECTED_HEAD,asset=process.env.SOURCE_ASSET_ID,version=process.env.RELEASE_VERSION
 assert.ok(['windows','windows-acceptance','platform','database','web','generation','hybrid'].includes(kind))
-assert.match(head,/^[a-f0-9]{40}$/);assert.match(asset,/^[0-9]+$/)
+assert.match(head,/^[a-f0-9]{40}$/);assert.match(version,/^[0-9]+\.[0-9]+\.[0-9]+$/);assert.match(asset,/^[0-9]+$/)
 assert.equal(process.env.GITHUB_REPOSITORY,'vettamed/vettamed-releases')
 const key=Buffer.from(process.env.SOURCE_KEY,'hex');assert.equal(key.length,32)
 const root=fs.mkdtempSync(path.join(fs.realpathSync.native(process.env.RUNNER_TEMP||os.tmpdir()),'vettamed-private-build-')),source=path.join(root,'source'),log=path.join(root,'private.log'),fd=fs.openSync(log,'w'),checks=[]
@@ -32,20 +32,20 @@ try{
   assert.equal(process.platform,'win32');assert.equal(process.arch,'x64')
   npm('Windows native tests',['run','test','--workspace','@vettamed/desktop'])
   npm('Windows data adapter tests',['run','test','--workspace','@vettamed/supabase'])
-  node('Fresh source-bound Windows package',['scripts/package-native-app.mjs','--win','--x64','--unsigned-production','--config.extraMetadata.version=3.2.32','--config.directories.output=apps/desktop/release/final-windows'])
+  node('Fresh source-bound Windows package',['scripts/package-native-app.mjs','--win','--x64','--unsigned-production','--config.extraMetadata.version='+version,'--config.directories.output=apps/desktop/release/final-windows'])
   const out=path.join(source,'apps/desktop/release/final-windows'),manifest=JSON.parse(fs.readFileSync(path.join(source,'.tmp-evidence/student-release-manifest.json')))
-  assert.equal(manifest.sourceHead,head);assert.equal(manifest.arch,'x64');assert.equal(manifest.version,'3.2.32')
+  assert.equal(manifest.sourceHead,head);assert.equal(manifest.arch,'x64');assert.equal(manifest.version,version)
   const req=createRequire(path.join(source,'apps/desktop/package.json')),asar=req('@electron/asar'),file=path.join(out,'win-unpacked/resources/app.asar')
   const files=asar.listPackage(file).map(n=>n.replace(/^[/\\]+/,'').replaceAll('\\','/')).filter(n=>!asar.statFile(file,n.split('/').join(path.sep)).files)
   const {auditNativeInventory}=await import(pathToFileURL(path.join(source,'scripts/native-package-contract.mjs')))
   const inventory=auditNativeInventory({mode:'asar',files,read:n=>asar.extractFile(file,n.split('/').join(path.sep)),manifest})
-  const exe=path.join(out,'Vettamed-3.2.32-x64.exe'),published=path.join(out,'Vettamed-3.2.32-win-x64.exe')
+  const exe=path.join(out,`Vettamed-${version}-x64.exe`),published=path.join(out,`Vettamed-${version}-win-x64.exe`)
   fs.renameSync(exe,published);fs.renameSync(exe+'.blockmap',published+'.blockmap')
-  const feed=path.join(out,'latest.yml');fs.writeFileSync(feed,fs.readFileSync(feed,'utf8').replaceAll('Vettamed-3.2.32-x64.exe','Vettamed-3.2.32-win-x64.exe'))
-  const receipt={schemaVersion:1,verifiedAt:new Date().toISOString(),sourceHead:head,product:'student',version:'3.2.32',arch:'x64',unsignedOwnerWaiver:manifest.signing.waiverId,asarSha256:hash(fs.readFileSync(file)),installerSha256:hash(fs.readFileSync(published)),inventory,manifest}
-  const receiptFile=path.join(root,'3.2.32-windows-artifact.json');fs.writeFileSync(receiptFile,JSON.stringify(receipt,null,2)+'\n')
-  const release=JSON.parse(execFileSync('gh',['release','view','v3.2.32','--repo',process.env.GITHUB_REPOSITORY,'--json','isDraft'],{encoding:'utf8'}));assert.equal(release.isDraft,true)
-  execFileSync('gh',['release','upload','v3.2.32',published,published+'.blockmap',feed,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
+  const feed=path.join(out,'latest.yml');fs.writeFileSync(feed,fs.readFileSync(feed,'utf8').replaceAll(`Vettamed-${version}-x64.exe`,`Vettamed-${version}-win-x64.exe`))
+  const receipt={schemaVersion:1,verifiedAt:new Date().toISOString(),sourceHead:head,product:'student',version,arch:'x64',unsignedOwnerWaiver:manifest.signing.waiverId,asarSha256:hash(fs.readFileSync(file)),installerSha256:hash(fs.readFileSync(published)),inventory,manifest}
+  const receiptFile=path.join(root,`${version}-windows-artifact.json`);fs.writeFileSync(receiptFile,JSON.stringify(receipt,null,2)+'\n')
+  const release=JSON.parse(execFileSync('gh',['release','view','v'+version,'--repo',process.env.GITHUB_REPOSITORY,'--json','isDraft'],{encoding:'utf8'}));assert.equal(release.isDraft,true)
+  execFileSync('gh',['release','upload','v'+version,published,published+'.blockmap',feed,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
   execFileSync('gh',['release','upload',process.env.BUILD_TRANSFER_TAG,receiptFile,'--repo',process.env.GITHUB_REPOSITORY,'--clobber'],{stdio:['ignore',fd,fd]})
  }
  if(kind==='windows-acceptance'){
@@ -53,8 +53,8 @@ try{
   const electronRequire=createRequire(path.join(source,'apps/desktop/package.json'));node('Ensure official Electron runtime',[path.join(path.dirname(electronRequire.resolve('electron')),'install.js')]);const electronExecutable=electronRequire('electron')
   node('Compile real Windows shortcut probe',['node_modules/typescript/bin/tsc','-p','apps/desktop/tsconfig.electron.json'])
   const shortcutFile=path.join(root,'shortcuts.json');run('Hold and release actual Windows shortcut table',electronExecutable,['scripts/probe-exam-lockdown.cjs',shortcutFile])
-  execFileSync('gh',['release','download','v3.2.32','--repo',process.env.GITHUB_REPOSITORY,'--pattern','Vettamed-3.2.32-win-x64.exe','--dir',root],{stdio:['ignore',fd,fd]})
-  const installer=path.join(root,'Vettamed-3.2.32-win-x64.exe');assert.equal(hash(fs.readFileSync(installer)),process.env.EXPECTED_INSTALLER_SHA)
+  execFileSync('gh',['release','download','v'+version,'--repo',process.env.GITHUB_REPOSITORY,'--pattern',`Vettamed-${version}-win-x64.exe`,'--dir',root],{stdio:['ignore',fd,fd]})
+  const installer=path.join(root,`Vettamed-${version}-win-x64.exe`);assert.equal(hash(fs.readFileSync(installer)),process.env.EXPECTED_INSTALLER_SHA)
   const installed=path.join(root,'installed');run('Install exact verified Windows package',installer,['/S','/D='+installed])
   const installedAsar=path.join(installed,'resources/app.asar');for(let i=0;i<100&&!fs.existsSync(installedAsar);i++)await new Promise(r=>setTimeout(r,200));assert.equal(hash(fs.readFileSync(installedAsar)),process.env.EXPECTED_ASAR_SHA)
   const app=spawn(path.join(installed,'Vettamed.exe'),['--user-data-dir='+path.join(root,'isolated-profile')],{env:environment,stdio:['ignore',fd,fd]})
